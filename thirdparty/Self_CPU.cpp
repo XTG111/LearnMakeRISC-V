@@ -1,57 +1,78 @@
 #include "Self_CPU.h"
+#include "Exception.h"
 
 uint32_t CPU::fetch()
 {
-    size_t index = static_cast<size_t>(pc);
-    
-    //小端实现 如果高位数据比如01020304排列将是大端实现
-    //利用位或符号实现组合
-    uint32_t inst = static_cast<uint32_t>(DRAM[index]) |
-        static_cast<uint32_t>(DRAM[index + 1] << 8) |
-        static_cast<uint32_t>(DRAM[index + 2] << 16) |
-        static_cast<uint32_t>(DRAM[index + 3] << 24);
-
-    return inst;
+    if (pc >= DRAM_BASE && pc <= DRAM_END)
+    {
+        return bus.load(pc, 32);
+    }
+    else
+    {
+        throw std::runtime_error("FetchFault at address " + std::to_string(pc));
+    }
 }
 
-void CPU::execute(uint32_t inst)
+uint64_t CPU::load(uint64_t addr, uint64_t size)
 {
-    //获取操作码 opcode inst中0-6位
-    uint32_t opcode = inst & 0x7f;
-    //获取目标寄存器 rd inst中7-11位
-    uint32_t rd = (inst >> 7) & 0x1f;
-    //获取源寄存器1 rs1 inst中15-19位
-    uint32_t rs1 = (inst >> 15) & 0x1f;
-    //获取源寄存器2 rs2 inst中20-24位
-    uint32_t rs2 = (inst >> 20) & 0x1f;
-    //获取功能码1 funct3 inst中12-14位
-    uint32_t funct3 = (inst >> 12) & 0x7;
-    //获取功能码2 funct7 inst中25-31位
-    uint32_t funct7 = (inst >> 25) & 0x7f;
-
-
-    //寄存器0
-    REGs[0] = 0;
-
-    //执行读取到的指令 add addi
-    switch (opcode)
+    if (addr >= DRAM_BASE && addr <= DRAM_END)
     {
-    case 0x13:{
-        //addi
-        //获取立即数 imm inst中的最高20位是为带符号扩展的立即数
-        int64_t imm = static_cast<uint32_t>(inst & 0xfff00000) >> 20;
-        //加法操作
-        REGs[rd] = REGs[rs1] + imm;
-        break;
-	}
-    case 0x33:{
-        //add
-        REGs[rd] = REGs[rs1] + REGs[rs2];
-        break;
-	}
-    default:
-        std::cerr << "Invaild Opcode: " << std::hex << opcode << std::endl;
-        break;
+        return bus.load(addr, size);
+    }
+    else
+    {
+        throw std::runtime_error("LoadAccessFault at address " + std::to_string(addr));
+    }
+}
+
+void CPU::store(uint64_t addr, uint64_t size, uint64_t value)
+{
+    if (addr >= DRAM_BASE && addr <= DRAM_END)
+    {
+        bus.store(addr, size, value);
+    }
+    else
+    {
+        throw std::runtime_error("StoreAMOAccessFault at address " + std::to_string(addr));
+    }
+}
+
+std::optional<uint64_t> CPU::execute(uint32_t inst)
+{
+    try {
+        uint32_t opcode = inst & 0x7f;
+        uint32_t rd = (inst >> 7) & 0x1f;
+        uint32_t rs1 = (inst >> 15) & 0x1f;
+        uint32_t rs2 = (inst >> 20) & 0x1f;
+        uint32_t funct3 = (inst >> 12) & 0x7;
+        uint32_t funct7 = (inst >> 25) & 0x7f;
+
+        // x0 is hardwired zero
+        REGs[0] = 0;
+
+        std::cout << "Executing instruction: 0x" << std::hex << inst << std::dec << std::endl;
+
+        // execute stage
+        switch (opcode) {
+        case 0x13: { // addi
+            int64_t imm = static_cast<int32_t>(inst & 0xfff00000) >> 20;
+            std::cout << "ADDI: x" << rd << " = x" << rs1 << " + " << imm << std::endl;
+            REGs[rd] = REGs[rs1] + imm;
+            return update_pc();
+        }
+        case 0x33: { // add
+            std::cout << "ADD: x" << rd << " = x" << rs1 << " + x" << rs2 << std::endl;
+            REGs[rd] = REGs[rs1] + REGs[rs2];
+            return update_pc();
+        }
+        default: {
+            throw Exception(Exception::Type::IllegalInstruction, opcode);
+        }
+        }
+    }
+    catch (const Exception& e) {
+        std::cerr << "Exception execute : " << e << std::endl;
+        return std::nullopt;  // 使用 std::optional 表示异常
     }
 }
 
@@ -70,4 +91,9 @@ void CPU::dump_registers()
             << std::setw(4) << "x" << i + 3 << "(" << RVABI[i + 3] << ") = " << std::setw(16) << REGs[i + 3] << std::endl;
     }
 }
+
+void CPU::dump_pc() const
+{
+}
+
 

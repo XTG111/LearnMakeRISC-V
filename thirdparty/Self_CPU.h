@@ -8,9 +8,10 @@
 #include <iostream>
 #include <string>
 #include <iomanip>
-
-//DRAM_SIZE 128MB
-const uint64_t DRAM_SIZE = 1024 * 1024 * 128;
+#include <optional>
+#include "DramType.h"
+#include "Self_Bus.h"
+#include "Self_DRAM.h"
 
 //CPU类
 class CPU
@@ -20,8 +21,8 @@ private:
 	std::array<uint64_t, 32> REGs;
 	//pc指针
 	uint64_t pc;
-	//内存 利用数组模拟
-	std::vector<uint8_t> DRAM;
+	//bus总线
+	BUS bus;
 	//RISC-V寄存器名称
 	const std::array<std::string, 32> RVABI = {
 		"zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
@@ -31,27 +32,35 @@ private:
 	};
 public:
 	//构造函数
-	CPU(const std::vector<uint8_t>& dram) :pc(0), DRAM(dram)
+	CPU(const std::vector<uint8_t>& code) :pc(DRAM_BASE),bus(code)
 	{
 		//初始化寄存器
 		REGs.fill(0);
 		//设置堆栈指针寄存器的初始值
-		REGs[2] = DRAM_SIZE - 1;
+		REGs[2] = DRAM_END;
 	}
 
-	//取指令操作 fetch
+	//取指令操作 fetch 在dram中 从pc位置开始取长度为32的指令
 	uint32_t fetch();
 
+	//读取操作
+	uint64_t load(uint64_t addr, uint64_t size);
+	//写入操作
+	void store(uint64_t addr, uint64_t size, uint64_t value);
+
 	//执行指令的函数 execute 
-	void execute(uint32_t inst);
+	std::optional<uint64_t> execute(uint32_t inst);
 
 	//输出打印每个寄存器的值
 	void dump_registers();
+	//输出打印pc指针
+	void dump_pc() const;
 
 public:
+	inline void ChangePC(uint64_t new_pc) { pc = new_pc; }
 	inline uint64_t GetPC() { return pc; }
-	inline void PCAdd(int num) { pc += static_cast<uint64_t>(num); }
-	inline std::vector<uint8_t> GetDRAM() { return DRAM; }
+	inline uint64_t update_pc() const {	return pc + 4; }
+	inline std::vector<uint8_t> GetDRAM() { return bus.GetDRAM(); }
 };
 #endif // !_SELF_CPU_H_
 

@@ -1,4 +1,5 @@
 #include "thirdparty/Self_CPU.h"
+#include "thirdparty/Exception.h"
 #include <fstream>
 #include <streambuf>
 
@@ -24,11 +25,20 @@ int main(int argc,char* argv[])
 	CPU cpu(code);
 
 	//根据指令执行操作
-	while (cpu.GetPC() << cpu.GetDRAM().size() * sizeof(cpu.GetDRAM()[0]))
-	{
-		uint32_t inst = cpu.fetch();
-		cpu.execute(inst);
-		cpu.PCAdd(4);
+	try {
+		while (true) {
+			uint32_t inst = cpu.fetch();
+			auto new_pc = cpu.execute(inst);
+			if (new_pc.has_value()) {
+				cpu.ChangePC(new_pc.value());
+			}
+			else {
+				break;
+			}
+		}
+	}
+	catch (const Exception& e) {
+		std::cerr << "Exception main: " << e << std::endl;
 	}
 
 	//打印当前cpu状态
